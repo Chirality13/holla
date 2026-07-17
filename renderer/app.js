@@ -815,6 +815,12 @@ function gotoWizardStep(n) {
     dot.classList.toggle('active', i === n - 1);
     dot.classList.toggle('done',   i < n - 1);
   });
+  
+  if (n === 1) {
+    setTimeout(() => $('w-name').focus(), 100);
+  } else if (n === 2) {
+    setTimeout(() => $('w-action-value').focus(), 100);
+  }
 }
 
 function updateActionValueUI() {

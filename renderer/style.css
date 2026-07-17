@@ -644,8 +644,8 @@ input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.2); }
   color: var(--text-1); font-size: 14px; font-family: inherit;
   padding: 10px 14px; outline: none;
   transition: border-color var(--t-fast), box-shadow var(--t-fast);
-  user-select: auto !important;
-  -webkit-user-select: auto !important;
+  user-select: text !important;
+  -webkit-user-select: text !important;
   -webkit-app-region: no-drag;
 }
 .text-input:focus {
