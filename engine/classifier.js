@@ -1,40 +1,57 @@
 /**
- * KNN Classifier for tap fingerprints — v2
+ * KNN Classifier for tap fingerprints — v3 (14-Dimensional Manifold)
  *
- * Feature vector (6 values):
- *   [ild, sc, bandLow, bandMid, bandHigh, logEnergy]
+ * Feature vector (14 values):
+ *   [ild, logEnergy, band0 ... band11]
  *
  *   ild      – Inter-channel Level Difference (−1…+1). Primary spatial feature.
- *              Measures which microphone "heard" the tap louder.
- *   sc       – Spectral centroid (0…1). Encodes the dominant frequency.
- *   bandLow  – Fraction of energy in 0–1 kHz (table resonance).
- *   bandMid  – Fraction of energy in 1–8 kHz (main tap transient).
- *   bandHigh – Fraction of energy in 8–24 kHz (high-frequency click).
- *   logEnergy– Log10 RMS energy. Low weight — varies with tap force.
- *
- * Weights are tuned for Intel SST microphone arrays where ILD is the
- * dominant reliable spatial indicator.
+ *   logEnergy– Log10 RMS energy. Low weight.
+ *   bandX    – 12 logarithmic Mel-scaled frequency bands (0...1 fraction of energy).
  */
 class KNNClassifier {
   constructor(k = 3) {
-    this.k       = k;
+    this.k = k;
     this.samples = [];
-    // Feature vector: [ild, sc, bandLow, bandMid, bandHigh, logE]
+    
+    // Feature vector: [ild, logE, b0..b11]
     // The weights represent (Normalization Scale × Importance)
-    // ILD: scale 50, importance 1.0   -> 50
-    // SC:  scale 200, importance 1.5  -> 300
-    // Bnd: scale 100, importance 1.0  -> 100
-    // nrg: scale 25, importance 0.1   -> 2.5
-    this.weights = [50, 300, 100, 100, 100, 2.5];
+    // ILD: scale 50, importance 1.0 -> 50
+    // LogE: scale 25, importance 0.1 -> 2.5
+    // Bands: scale 100, importance 1.5 -> 150
+    this.weights = [50, 2.5, 150, 150, 150, 150, 150, 150, 150, 150, 150, 150, 150, 150];
+    
+    // Cache per-button dynamic thresholds
+    this.buttonThresholds = {};
   }
 
-  /** Rebuild from stored button profiles. */
+  /** Rebuild from stored button profiles and calculate standard deviations. */
   loadFromButtons(buttons) {
     this.samples = [];
+    this.buttonThresholds = {};
+    
     for (const btn of buttons) {
-      for (const f of (btn.samples || [])) {
+      if (!btn.samples || btn.samples.length === 0) continue;
+      
+      for (const f of btn.samples) {
         this.samples.push({ buttonId: btn.id, name: btn.name, features: f });
       }
+      
+      // Calculate variance / dynamic threshold for this button
+      let totalDist = 0;
+      let comparisons = 0;
+      const n = btn.samples.length;
+      
+      for (let i = 0; i < n; i++) {
+        for (let j = i + 1; j < n; j++) {
+          totalDist += this._distance(btn.samples[i], btn.samples[j]);
+          comparisons++;
+        }
+      }
+      
+      const meanDist = comparisons > 0 ? totalDist / comparisons : 0;
+      // Rejection threshold is mean intra-class distance + an expansion factor
+      // A tight cluster means strict rejection. A loose cluster means slightly wider bounds.
+      this.buttonThresholds[btn.id] = Math.max(30, meanDist * 2.5);
     }
   }
 
@@ -44,6 +61,7 @@ class KNNClassifier {
 
   clearButton(buttonId) {
     this.samples = this.samples.filter(s => s.buttonId !== buttonId);
+    delete this.buttonThresholds[buttonId];
   }
 
   get sampleCount() { return this.samples.length; }
@@ -61,7 +79,7 @@ class KNNClassifier {
 
   /**
    * Classify a feature vector.
-   * Returns { buttonId, name, confidence, distance } or null.
+   * Returns { buttonId, name, confidence, distance, threshold } or null.
    */
   classify(features) {
     if (this.samples.length === 0) return null;
@@ -84,11 +102,14 @@ class KNNClassifier {
     }
 
     const winner = nbrs.find(n => n.buttonId === winnerId);
+    const dynamicThreshold = this.buttonThresholds[winnerId] || 150; // Fallback
+    
     return {
       buttonId:   winnerId,
       name:       winner.name,
       confidence: max / k,
-      distance:   nbrs[0].dist
+      distance:   nbrs[0].dist,
+      threshold:  dynamicThreshold
     };
   }
 }

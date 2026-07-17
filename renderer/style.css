@@ -364,21 +364,22 @@ html, body {
 }
 .tdoa-value { font-size: 18px; font-weight: 700; color: var(--accent-light); text-align: center; }
 
-/* Spectral band bars */
-.spec-bands { display: flex; flex-direction: column; gap: 7px; }
-.spec-band-wrap {
-  display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-3);
+/* ── Monitor: 12-Band EQ ── */
+.eq-grid {
+  display: flex; gap: 4px; height: 64px; align-items: flex-end;
+  padding: 8px 0;
 }
-.spec-band-wrap span { width: 28px; flex-shrink: 0; }
-.spec-track {
-  flex: 1; height: 10px; background: rgba(255,255,255,0.04);
-  border-radius: 99px; overflow: hidden;
+.eq-bar-wrap {
+  flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end;
 }
-.spec-fill {
-  height: 100%; border-radius: 99px; width: 0;
-  background: var(--sc, var(--accent));
-  transition: width 0.25s cubic-bezier(0.4,0,0.2,1);
-  box-shadow: 0 0 6px var(--sc, var(--accent-glow));
+.eq-track {
+  width: 100%; height: 100%; background: var(--bg-3); border-radius: 4px; overflow: hidden;
+  position: relative;
+}
+.eq-fill {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  background: var(--accent); height: 0%;
+  transition: height var(--t-fast);
 }
 
 /* SNR gauge */

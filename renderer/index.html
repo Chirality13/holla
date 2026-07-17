@@ -145,11 +145,20 @@
               <div class="tdoa-value" id="tdoa-value">—</div>
             </div>
             <!-- Spectral bands -->
-            <div class="card-label" style="margin-top:14px">Spectral Fingerprint</div>
-            <div class="spec-bands">
-              <div class="spec-band-wrap"><span>Low</span><div class="spec-track"><div class="spec-fill" id="sb-low"></div></div></div>
-              <div class="spec-band-wrap"><span>Mid</span><div class="spec-track"><div class="spec-fill" id="sb-mid" style="--sc:#06b6d4"></div></div></div>
-              <div class="spec-band-wrap"><span>High</span><div class="spec-track"><div class="spec-fill" id="sb-high" style="--sc:#10b981"></div></div></div>
+            <div class="card-label" style="margin-top:14px">12-Band Spectral Fingerprint</div>
+            <div class="eq-grid" id="eq-grid">
+              <div class="eq-bar-wrap"><div class="eq-track"><div class="eq-fill" id="eq-0"></div></div></div>
+              <div class="eq-bar-wrap"><div class="eq-track"><div class="eq-fill" id="eq-1"></div></div></div>
+              <div class="eq-bar-wrap"><div class="eq-track"><div class="eq-fill" id="eq-2"></div></div></div>
+              <div class="eq-bar-wrap"><div class="eq-track"><div class="eq-fill" id="eq-3"></div></div></div>
+              <div class="eq-bar-wrap"><div class="eq-track"><div class="eq-fill" id="eq-4"></div></div></div>
+              <div class="eq-bar-wrap"><div class="eq-track"><div class="eq-fill" id="eq-5"></div></div></div>
+              <div class="eq-bar-wrap"><div class="eq-track"><div class="eq-fill" id="eq-6"></div></div></div>
+              <div class="eq-bar-wrap"><div class="eq-track"><div class="eq-fill" id="eq-7"></div></div></div>
+              <div class="eq-bar-wrap"><div class="eq-track"><div class="eq-fill" id="eq-8"></div></div></div>
+              <div class="eq-bar-wrap"><div class="eq-track"><div class="eq-fill" id="eq-9"></div></div></div>
+              <div class="eq-bar-wrap"><div class="eq-track"><div class="eq-fill" id="eq-10"></div></div></div>
+              <div class="eq-bar-wrap"><div class="eq-track"><div class="eq-fill" id="eq-11"></div></div></div>
             </div>
             <!-- SNR gauge -->
             <div class="card-label" style="margin-top:14px">Live SNR (above noise floor)</div>
@@ -161,14 +170,11 @@
             <div class="card-label">Last Tap Features</div>
             <div class="feature-list" id="feature-list">
               <div class="feature-row"><span>ILD (channel balance)</span><span id="f-ild">—</span></div>
-              <div class="feature-row"><span>Spectral Centroid</span><span id="f-sc">—</span></div>
-              <div class="feature-row"><span>Band Low (0–1kHz)</span><span id="f-blow">—</span></div>
-              <div class="feature-row"><span>Band Mid (1–8kHz)</span><span id="f-bmid">—</span></div>
-              <div class="feature-row"><span>Band High (8kHz+)</span><span id="f-bhigh">—</span></div>
               <div class="feature-row"><span>Log Energy</span><span id="f-energy">—</span></div>
               <div class="feature-row"><span>Classified as</span><span id="f-class" class="accent">—</span></div>
               <div class="feature-row"><span>Confidence</span><span id="f-conf">—</span></div>
               <div class="feature-row"><span>Distance</span><span id="f-dist">—</span></div>
+              <div class="feature-row"><span>Rejection Threshold</span><span id="f-thresh">—</span></div>
             </div>
           </div>
 
@@ -360,6 +366,11 @@
           <div class="sample-dot" data-idx="2"></div>
           <div class="sample-dot" data-idx="3"></div>
           <div class="sample-dot" data-idx="4"></div>
+          <div class="sample-dot" data-idx="5"></div>
+          <div class="sample-dot" data-idx="6"></div>
+          <div class="sample-dot" data-idx="7"></div>
+          <div class="sample-dot" data-idx="8"></div>
+          <div class="sample-dot" data-idx="9"></div>
         </div>
 
         <div class="wizard-nav">

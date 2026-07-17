@@ -92,7 +92,7 @@ const state = {
 };
 
 const knn       = new KNNClassifier(3);
-const NEED_TAPS = 5;
+const NEED_TAPS = 10;
 
 const EMOJIS = [
   '🎯','📧','🎵','📸','💻','🌐','📁','⭐','🔔','🚀',
@@ -382,30 +382,31 @@ function startWaveform(analyser, ctx) {
 
 // ── Monitor panel updates ─────────────────────────────────────────────────
 function updateMonitor(features, tdoa, result) {
-  const [ild, sc, bLow, bMid, bHigh, logE] = features;
+  const ild = features[0];
+  const logE = features[1];
+  const bands = features.slice(2);
 
   // ILD bar: map −1…+1 → 0–100%
   const pct = ((ild + 1) / 2) * 100;
   $('tdoa-bar').style.left  = `${clamp(pct, 2, 98)}%`;
   $('tdoa-value').textContent = `ILD ${ild >= 0 ? '+' : ''}${ild.toFixed(3)}`;
 
-  // Spectral band bars (each 0–1)
-  $('sb-low').style.width  = `${(bLow  * 100).toFixed(1)}%`;
-  $('sb-mid').style.width  = `${(bMid  * 100).toFixed(1)}%`;
-  $('sb-high').style.width = `${(bHigh * 100).toFixed(1)}%`;
+  // 12-Band EQ (each 0–1)
+  for (let i = 0; i < 12; i++) {
+    const el = $(`eq-${i}`);
+    if (el) el.style.height = `${(bands[i] * 100).toFixed(1)}%`;
+  }
 
   // Feature table
-  $('f-ild').textContent   = ild.toFixed(4);
-  $('f-sc').textContent    = sc.toFixed(4);
-  $('f-blow').textContent  = bLow.toFixed(4);
-  $('f-bmid').textContent  = bMid.toFixed(4);
-  $('f-bhigh').textContent = bHigh.toFixed(4);
+  $('f-ild').textContent    = ild.toFixed(4);
   $('f-energy').textContent = logE.toFixed(4);
 
   if (result) {
     $('f-class').textContent = result.name;
     $('f-conf').textContent  = `${(result.confidence * 100).toFixed(0)}%`;
     $('f-dist').textContent  = result.distance.toFixed(2);
+    const th = $('f-thresh');
+    if (th) th.textContent = result.threshold ? result.threshold.toFixed(2) : '150';
   }
 }
 
@@ -447,7 +448,7 @@ function onWarmup({ progress }) {
   const pct = Math.round(progress * 100);
   $('cal-status').textContent = pct < 100
     ? `Calibrating microphone… ${pct}%`
-    : 'Tap the table 5 times in the same spot!';
+    : 'Tap the table 10 times in the same spot!';
 }
 
 function addTapLogEntry(name, status) {
@@ -788,9 +789,9 @@ function handleCalibrationTap(features, logE) {
 
   // Status
   if (n < NEED_TAPS) {
-    $('cal-status').textContent = `${n} of ${NEED_TAPS} — keep going!`;
+    $('cal-status').textContent = `Keep tapping... (${n}/10)`;
   } else {
-    $('cal-status').textContent = 'All taps recorded ✓';
+    $('cal-status').textContent = 'Calibration complete!';
     $('w-finish').classList.remove('disabled');
   }
 

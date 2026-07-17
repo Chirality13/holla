@@ -227,20 +227,20 @@ class HollaProcessor extends AudioWorkletProcessor {
       total   += power[k];
     }
 
-    let wSum = 0;
-    for (let k = 0; k < half; k++) wSum += k * power[k];
-    const sc = total > 0 ? wSum / total / half : 0;
-
-    const bLow  = this._bandEnergy(power,   0,  42) / (total + 1e-12);
-    const bMid  = this._bandEnergy(power,  43, 341) / (total + 1e-12);
-    const bHigh = this._bandEnergy(power, 342,1023) / (total + 1e-12);
+    const bandEdges = [4, 8, 14, 24, 40, 67, 113, 190, 319, 536, 902, 1023];
+    const bands = new Array(12);
+    let startBin = 0;
+    for (let i = 0; i < 12; i++) {
+      bands[i] = this._bandEnergy(power, startBin, bandEdges[i]) / (total + 1e-12);
+      startBin = bandEdges[i] + 1;
+    }
 
     const logE  = Math.log10(energy + 1e-12);
     const tdoa  = mono ? 0 : this._gccPhat(chL, chR);
 
     this.port.postMessage({
       type:       'tap',
-      features:   [ild, sc, bLow, bMid, bHigh, logE],
+      features:   [ild, logE, ...bands],
       tdoa,
       monoMode:   mono,
       noiseFloor: this.noiseFloor,
