@@ -326,7 +326,7 @@ function onTapReceived({ features, monoMode, tdoa, snr, noiseFloor }) {
 
 function fireButton(btn) {
   // Visual feedback
-  const card = document.querySelector(`.button-card[data-id="${btn.id}"]`);
+  const card = document.querySelector(`.desk-button[data-id="${btn.id}"]`);
   if (card) {
     card.classList.remove('firing');
     void card.offsetWidth;  // reflow to restart animation
@@ -553,65 +553,83 @@ async function saveSettings() {
 
 // ── Button Grid ───────────────────────────────────────────────────────────
 function renderButtonGrid() {
-  const grid   = $('button-grid');
+  const desk   = $('virtual-desk');
   const empty  = $('empty-state');
   const sub    = $('dash-sub');
 
-  grid.innerHTML = '';
+  desk.querySelectorAll('.desk-button').forEach(el => el.remove());
 
   const visibleButtons = state.buttons.filter(b => b.id !== '__REJECT__');
 
   if (visibleButtons.length === 0) {
-    grid.classList.add('hidden');
+    desk.classList.add('hidden');
     empty.classList.remove('hidden');
     sub.textContent = 'You have 0 active buttons.';
     return;
   }
 
-  grid.classList.remove('hidden');
+  desk.classList.remove('hidden');
   empty.classList.add('hidden');
   sub.textContent = `You have ${visibleButtons.length} active button${visibleButtons.length===1?'':'s'}.`;
 
+  const W = desk.offsetWidth || 600;
+  const H = desk.offsetHeight || 400;
+
   for (const btn of visibleButtons) {
-    const card = document.createElement('div');
-    card.className     = 'button-card';
-    card.dataset.id    = btn.id;
-    card.style.setProperty('--card-color', btn.color || '#7c3aed');
+    const el = document.createElement('div');
+    el.className = 'desk-button';
+    el.dataset.id = btn.id;
 
-    const actionLabel = btn.action.type === 'screenshot'
-      ? 'Screenshot to Desktop'
-      : btn.action.value || btn.action.type;
+    let x = btn.ui_x !== undefined ? btn.ui_x : (0.2 + Math.random()*0.6) * W;
+    let y = btn.ui_y !== undefined ? btn.ui_y : (0.2 + Math.random()*0.6) * H;
+    
+    el.style.left = `${x}px`;
+    el.style.top = `${y}px`;
 
-    const hasSamples = btn.samples && btn.samples.length >= NEED_TAPS;
+    el.innerHTML = `
+      <div class="b-icon">${btn.icon || '🎯'}</div>
+      <div class="b-name">${btn.name}</div>
+    `;
 
-    card.innerHTML = `
-      <div class="card-menu">
-        <button class="card-menu-btn edit-btn" title="Edit" data-id="${btn.id}">✎</button>
-        <button class="card-menu-btn del-btn"  title="Delete" data-id="${btn.id}">✕</button>
-      </div>
-      <div class="card-icon">${btn.icon || '🎯'}</div>
-      <div class="card-name">${btn.name}</div>
-      <div class="card-action">${actionLabel}</div>
-      <div class="card-badge ${hasSamples ? 'ok' : ''}">
-        ${hasSamples ? '✓ Calibrated' : `${(btn.samples||[]).length}/${NEED_TAPS} taps`}
-      </div>`;
+    // Drag logic
+    let isDragging = false;
+    let startX = 0, startY = 0;
+    let initialX = 0, initialY = 0;
 
-    // Click = manual trigger (for testing)
-    card.addEventListener('click', (e) => {
-      if (e.target.closest('.card-menu')) return;
-      fireButton(btn);
+    el.addEventListener('mousedown', e => {
+      isDragging = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      initialX = parseFloat(el.style.left);
+      initialY = parseFloat(el.style.top);
+      e.stopPropagation();
     });
 
-    card.querySelector('.edit-btn').addEventListener('click', (e) => {
-      e.stopPropagation();
+    window.addEventListener('mousemove', e => {
+      if (!isDragging) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      x = Math.max(36, Math.min(desk.offsetWidth - 36, initialX + dx));
+      y = Math.max(36, Math.min(desk.offsetHeight - 36, initialY + dy));
+      el.style.left = `${x}px`;
+      el.style.top = `${y}px`;
+    });
+
+    window.addEventListener('mouseup', async () => {
+      if (isDragging) {
+        isDragging = false;
+        btn.ui_x = x;
+        btn.ui_y = y;
+        await window.holla.saveButtons(state.buttons);
+      }
+    });
+
+    el.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
       openWizard(btn);
     });
-    card.querySelector('.del-btn').addEventListener('click', (e) => {
-      e.stopPropagation();
-      deleteButton(btn.id);
-    });
 
-    grid.appendChild(card);
+    desk.appendChild(el);
   }
 }
 
@@ -831,7 +849,8 @@ function handleCalibrationTap(features, logE) {
 
 async function finishWizard() {
   const w = state.wizard;
-  if (w.samples.length < NEED_TAPS) return;
+  const MIN_TAPS = 5;
+  if (w.samples.length < MIN_TAPS) return;
 
   const CARD_COLORS = [
     '#7c3aed','#2563eb','#059669','#d97706',
