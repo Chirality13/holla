@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self'; media-src 'self' blob:; worker-src blob:;" />
+  <title>Holla — Table Tap Interface</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ── Custom Title Bar ──────────────────────────────────────────────── -->
+  <div class="titlebar" id="titlebar">
+    <div class="titlebar-left">
+      <div class="app-logo">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+          <circle cx="10" cy="10" r="3" fill="#7c3aed"/>
+          <circle cx="10" cy="10" r="6" stroke="#7c3aed" stroke-width="1.2" stroke-dasharray="2 2" opacity="0.6"/>
+          <circle cx="10" cy="10" r="9" stroke="#06b6d4" stroke-width="0.8" stroke-dasharray="1 3" opacity="0.3"/>
+        </svg>
+      </div>
+      <span class="titlebar-title">Holla</span>
+      <div class="status-pill" id="status-pill">
+        <span class="status-dot" id="status-dot"></span>
+        <span id="status-text">Idle</span>
+      </div>
+    </div>
+    <div class="titlebar-controls">
+      <button class="tb-btn" id="tb-minimize" title="Minimize">&#8722;</button>
+      <button class="tb-btn" id="tb-maximize" title="Maximize">&#9633;</button>
+      <button class="tb-btn close" id="tb-close" title="Close to tray">&#10005;</button>
+    </div>
+  </div>
+
+  <!-- ── Main Layout ───────────────────────────────────────────────────── -->
+  <div class="layout">
+
+    <!-- Sidebar Navigation -->
+    <nav class="sidebar" id="sidebar">
+      <button class="nav-btn active" data-view="dashboard" title="Buttons">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+          <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+        </svg>
+        <span class="nav-label">Buttons</span>
+      </button>
+      <button class="nav-btn" data-view="monitor" title="Monitor">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+        </svg>
+        <span class="nav-label">Monitor</span>
+      </button>
+      <button class="nav-btn" data-view="settings" title="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+        <span class="nav-label">Settings</span>
+      </button>
+
+      <!-- Bottom: Start/Stop -->
+      <div class="sidebar-spacer"></div>
+      <button class="nav-btn listen-btn" id="btn-listen" title="Toggle Listening">
+        <svg id="listen-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+          <line x1="12" y1="19" x2="12" y2="23"/>
+          <line x1="8" y1="23" x2="16" y2="23"/>
+        </svg>
+        <span class="nav-label" id="listen-label">Start</span>
+      </button>
+    </nav>
+
+    <!-- Content Area -->
+    <main class="content" id="content">
+
+      <!-- ── Dashboard View ─────────────────────────────────────────── -->
+      <div class="view active" id="view-dashboard">
+        <div class="view-header">
+          <div>
+            <h1 class="view-title">Buttons</h1>
+            <p class="view-sub" id="dash-sub">Tap a spot on your table to trigger a button.</p>
+          </div>
+          <button class="btn-primary" id="btn-add">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            New Button
+          </button>
+        </div>
+
+        <!-- Empty state -->
+        <div class="empty-state" id="empty-state">
+          <div class="empty-icon">
+            <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+              <circle cx="28" cy="28" r="20" stroke="#7c3aed" stroke-width="1.5" stroke-dasharray="4 4" opacity="0.5"/>
+              <circle cx="28" cy="28" r="10" stroke="#06b6d4" stroke-width="1.5" opacity="0.4"/>
+              <circle cx="28" cy="28" r="4" fill="#7c3aed" opacity="0.7"/>
+            </svg>
+          </div>
+          <h2>No buttons yet</h2>
+          <p>Click <strong>New Button</strong> to calibrate a tap location and assign an action to it.</p>
+        </div>
+
+        <!-- Button grid -->
+        <div class="button-grid" id="button-grid"></div>
+      </div>
+
+      <!-- ── Monitor View ───────────────────────────────────────────── -->
+      <div class="view" id="view-monitor">
+        <div class="view-header">
+          <div>
+            <h1 class="view-title">Monitor</h1>
+            <p class="view-sub">Live microphone signal and tap fingerprint.</p>
+          </div>
+        </div>
+
+        <div class="monitor-grid">
+          <!-- Waveform -->
+          <div class="glass-card monitor-card">
+            <div class="card-label">Microphone Waveform</div>
+            <canvas id="waveform-canvas" height="120"></canvas>
+            <div class="waveform-footer">
+              <span id="mono-badge" class="badge hidden">MONO MODE</span>
+              <span id="sr-badge" class="badge">48000 Hz</span>
+            </div>
+          </div>
+
+          <!-- ILD bar -->
+          <div class="glass-card monitor-card">
+            <div class="card-label">ILD — Channel Balance (Last Tap)</div>
+            <div class="tdoa-viz" id="tdoa-viz">
+              <div class="tdoa-track">
+                <div class="tdoa-bar" id="tdoa-bar"></div>
+                <div class="tdoa-center"></div>
+              </div>
+              <div class="tdoa-labels">
+                <span>◀ Left louder</span>
+                <span>Right louder ▶</span>
+              </div>
+              <div class="tdoa-value" id="tdoa-value">—</div>
+            </div>
+            <!-- Spectral bands -->
+            <div class="card-label" style="margin-top:14px">Spectral Fingerprint</div>
+            <div class="spec-bands">
+              <div class="spec-band-wrap"><span>Low</span><div class="spec-track"><div class="spec-fill" id="sb-low"></div></div></div>
+              <div class="spec-band-wrap"><span>Mid</span><div class="spec-track"><div class="spec-fill" id="sb-mid" style="--sc:#06b6d4"></div></div></div>
+              <div class="spec-band-wrap"><span>High</span><div class="spec-track"><div class="spec-fill" id="sb-high" style="--sc:#10b981"></div></div></div>
+            </div>
+            <!-- SNR gauge -->
+            <div class="card-label" style="margin-top:14px">Live SNR (above noise floor)</div>
+            <div class="snr-row"><div class="snr-track"><div class="snr-fill" id="snr-fill"></div></div><span class="snr-val" id="snr-val">—</span></div>
+          </div>
+
+          <!-- Last tap info -->
+          <div class="glass-card monitor-card">
+            <div class="card-label">Last Tap Features</div>
+            <div class="feature-list" id="feature-list">
+              <div class="feature-row"><span>ILD (channel balance)</span><span id="f-ild">—</span></div>
+              <div class="feature-row"><span>Spectral Centroid</span><span id="f-sc">—</span></div>
+              <div class="feature-row"><span>Band Low (0–1kHz)</span><span id="f-blow">—</span></div>
+              <div class="feature-row"><span>Band Mid (1–8kHz)</span><span id="f-bmid">—</span></div>
+              <div class="feature-row"><span>Band High (8kHz+)</span><span id="f-bhigh">—</span></div>
+              <div class="feature-row"><span>Log Energy</span><span id="f-energy">—</span></div>
+              <div class="feature-row"><span>Classified as</span><span id="f-class" class="accent">—</span></div>
+              <div class="feature-row"><span>Confidence</span><span id="f-conf">—</span></div>
+              <div class="feature-row"><span>Distance</span><span id="f-dist">—</span></div>
+            </div>
+          </div>
+
+          <!-- Tap log -->
+          <div class="glass-card monitor-card tap-log-card">
+            <div class="card-label">Tap Log</div>
+            <div class="tap-log" id="tap-log"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Settings View ──────────────────────────────────────────── -->
+      <div class="view" id="view-settings">
+        <div class="view-header">
+          <div>
+            <h1 class="view-title">Settings</h1>
+            <p class="view-sub">Fine-tune detection sensitivity and behaviour.</p>
+          </div>
+        </div>
+
+        <div class="settings-grid">
+          <div class="glass-card settings-card">
+            <h3 class="settings-section">Detection</h3>
+
+            <div class="setting-row">
+              <div class="setting-info">
+                <label for="s-snr">SNR Threshold (×)</label>
+                <p>Tap must be this many times louder than ambient noise. Higher = harder to trigger. Raise if fan/noise triggers false taps.</p>
+              </div>
+              <div class="setting-control">
+                <input type="range" id="s-snr" min="5" max="80" step="1" />
+                <span class="range-val" id="s-snr-val">25</span>
+              </div>
+            </div>
+
+            <div class="setting-row">
+              <div class="setting-info">
+                <label for="s-cooldown">Cooldown (ms)</label>
+                <p>Minimum time between recognised taps.</p>
+              </div>
+              <div class="setting-control">
+                <input type="range" id="s-cooldown" min="150" max="800" step="10" />
+                <span class="range-val" id="s-cooldown-val">350</span>
+              </div>
+            </div>
+
+            <div class="setting-row">
+              <div class="setting-info">
+                <label for="s-maxdist">Rejection Threshold</label>
+                <p>Maximum KNN distance to accept. Taps further than this are ignored.</p>
+              </div>
+              <div class="setting-control">
+                <input type="range" id="s-maxdist" min="50" max="1000" step="10" />
+                <span class="range-val" id="s-maxdist-val">300</span>
+              </div>
+            </div>
+
+            <div class="setting-row">
+              <div class="setting-info">
+                <label for="s-k">KNN Neighbours (k)</label>
+                <p>Number of nearest neighbours for classification voting.</p>
+              </div>
+              <div class="setting-control">
+                <input type="range" id="s-k" min="1" max="9" step="2" />
+                <span class="range-val" id="s-k-val">3</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="glass-card settings-card">
+            <h3 class="settings-section">Behaviour</h3>
+
+            <div class="setting-row toggle-row">
+              <div class="setting-info">
+                <label>Native Notifications</label>
+                <p>Show a toast when a button fires.</p>
+              </div>
+              <label class="toggle">
+                <input type="checkbox" id="s-notify" />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+
+            <h3 class="settings-section" style="margin-top:24px">Microphone</h3>
+            <div class="mic-info glass-inner" id="mic-info">
+              <div class="mic-row"><span>Device</span><span id="mi-name">—</span></div>
+              <div class="mic-row"><span>Channels</span><span id="mi-channels">—</span></div>
+              <div class="mic-row"><span>Sample Rate</span><span id="mi-sr">—</span></div>
+              <div class="mic-row"><span>Mode</span><span id="mi-mode">—</span></div>
+            </div>
+            <button class="btn-secondary" id="btn-test-mic" style="margin-top:12px">
+              Test Microphone
+            </button>
+          </div>
+        </div>
+
+        <div class="settings-footer">
+          <button class="btn-primary" id="btn-save-settings">Save Settings</button>
+          <span class="save-confirm hidden" id="save-confirm">✓ Saved</span>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- ── Calibration Wizard Modal ───────────────────────────────────────── -->
+  <div class="modal-backdrop hidden" id="modal-backdrop">
+    <div class="modal glass-card" id="modal">
+
+      <div class="modal-header">
+        <h2 id="modal-title">New Button</h2>
+        <button class="modal-close" id="modal-close">&#10005;</button>
+      </div>
+
+      <!-- Step dots -->
+      <div class="wizard-steps">
+        <div class="step-dot active" data-step="1"></div>
+        <div class="step-line"></div>
+        <div class="step-dot" data-step="2"></div>
+        <div class="step-line"></div>
+        <div class="step-dot" data-step="3"></div>
+      </div>
+
+      <!-- Step 1: Name + Icon -->
+      <div class="wizard-step active" id="ws-1">
+        <p class="wizard-hint">Give this button a name and pick an icon.</p>
+        <div class="name-row">
+          <input type="text" id="w-name" class="text-input" placeholder="Button name…" maxlength="24" />
+        </div>
+        <div class="emoji-palette" id="emoji-palette"></div>
+        <div class="wizard-nav">
+          <span></span>
+          <button class="btn-primary" id="w-next-1">Next →</button>
+        </div>
+      </div>
+
+      <!-- Step 2: Action -->
+      <div class="wizard-step" id="ws-2">
+        <p class="wizard-hint">What should this button do?</p>
+        <div class="action-types" id="action-types">
+          <button class="action-type-btn active" data-type="open_url">
+            <span class="at-icon">🌐</span>
+            <span>Open URL</span>
+          </button>
+          <button class="action-type-btn" data-type="launch_app">
+            <span class="at-icon">🚀</span>
+            <span>Launch App</span>
+          </button>
+          <button class="action-type-btn" data-type="screenshot">
+            <span class="at-icon">📸</span>
+            <span>Screenshot</span>
+          </button>
+          <button class="action-type-btn" data-type="custom_command">
+            <span class="at-icon">⌨️</span>
+            <span>Command</span>
+          </button>
+        </div>
+        <div class="action-value-wrap" id="action-value-wrap">
+          <input type="text" id="w-action-value" class="text-input" placeholder="https://…" />
+          <p class="input-hint" id="w-action-hint">Enter the URL to open in your default browser.</p>
+        </div>
+        <div class="wizard-nav">
+          <button class="btn-secondary" id="w-back-2">← Back</button>
+          <button class="btn-primary" id="w-next-2">Next →</button>
+        </div>
+      </div>
+
+      <!-- Step 3: Calibration -->
+      <div class="wizard-step" id="ws-3">
+        <p class="wizard-hint">Tap the <strong>same spot</strong> on your table 5 times.</p>
+
+        <div class="cal-ring-wrap">
+          <svg class="cal-ring" viewBox="0 0 120 120">
+            <circle class="cal-track" cx="60" cy="60" r="52"/>
+            <circle class="cal-progress" id="cal-progress" cx="60" cy="60" r="52"
+                    stroke-dasharray="326.7" stroke-dashoffset="326.7"/>
+          </svg>
+          <div class="cal-count-wrap">
+            <span class="cal-count" id="cal-count">0</span>
+            <span class="cal-of">/ 5</span>
+          </div>
+        </div>
+
+        <p class="cal-status" id="cal-status">Waiting for microphone…</p>
+
+        <div class="tap-samples" id="tap-samples">
+          <div class="sample-dot" data-idx="0"></div>
+          <div class="sample-dot" data-idx="1"></div>
+          <div class="sample-dot" data-idx="2"></div>
+          <div class="sample-dot" data-idx="3"></div>
+          <div class="sample-dot" data-idx="4"></div>
+        </div>
+
+        <div class="wizard-nav">
+          <button class="btn-secondary" id="w-back-3">← Back</button>
+          <button class="btn-primary disabled" id="w-finish">Save Button ✓</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── Tap Ripple overlay (injected by JS) ───────────────────────────── -->
+  <div id="ripple-container"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

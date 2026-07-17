@@ -1,0 +1,15 @@
+{
+  "name": "holla",
+  "version": "1.0.0",
+  "description": "Acoustic table tap interface — turn your desk into programmable buttons",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --inspect"
+  },
+  "devDependencies": {
+    "electron": "^30.0.0"
+  },
+  "author": "Chirag",
+  "license": "MIT"
+}
