@@ -19,8 +19,13 @@ class KNNClassifier {
   constructor(k = 3) {
     this.k       = k;
     this.samples = [];
-    // Weights per feature: [ild, sc, bLow, bMid, bHigh, logE]
-    this.weights = [15, 4, 6, 5, 3, 0.3];
+    // Feature vector: [ild, sc, bandLow, bandMid, bandHigh, logE]
+    // The weights represent (Normalization Scale × Importance)
+    // ILD: scale 50, importance 1.0   -> 50
+    // SC:  scale 200, importance 1.5  -> 300
+    // Bnd: scale 100, importance 1.0  -> 100
+    // nrg: scale 25, importance 0.1   -> 2.5
+    this.weights = [50, 300, 100, 100, 100, 2.5];
   }
 
   /** Rebuild from stored button profiles. */

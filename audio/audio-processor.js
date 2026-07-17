@@ -49,6 +49,12 @@ class HollaProcessor extends AudioWorkletProcessor {
     this.energyBuf  = new Float32Array(8);
     this.energyIdx  = 0;
 
+    // ── Impulse Profiler ────────────────────────────────────────────────
+    this.captureFrames   = 0;
+    this.CAPTURE_MAX     = 15; // ~40ms window to check for exponential decay
+    this.tapPeakEnergy   = 0;
+    this.tapIsMono       = false;
+
     // ── Circular audio buffers ──────────────────────────────────────────
     this.bufL       = new Float32Array(this.BUF_SIZE);
     this.bufR       = new Float32Array(this.BUF_SIZE);
@@ -147,10 +153,32 @@ class HollaProcessor extends AudioWorkletProcessor {
     }
     this.noiseFloor = Math.max(1e-7, this.noiseFloor); // Ultimate safety clamp
 
-    // 7. Tap onset gate: SNR gate AND absolute minimum energy gate
-    if (snr > this.snrThreshold && smoothSte > this.absMinEnergy) {
-      this.cooldown = this.cooldownFrames;
-      this._processTap(smoothSte, mono);
+    // 7. Tap onset gate & Impulse capturing
+    if (this.captureFrames > 0) {
+      this.captureFrames--;
+      if (smoothSte > this.tapPeakEnergy) {
+        this.tapPeakEnergy = smoothSte;
+      }
+      
+      if (this.captureFrames === 0) {
+        // End of 40ms capture window. Evaluate decay!
+        const decayRatio = smoothSte / this.tapPeakEnergy;
+        
+        // A hard table tap decays extremely quickly (usually < 0.2 after 40ms).
+        // Speech, laughs, music sustain much longer (usually > 0.6 after 40ms).
+        if (decayRatio < 0.4) {
+          // Valid impulse!
+          this.cooldown = this.cooldownFrames;
+          this._processTap(this.tapPeakEnergy, this.tapIsMono);
+        } else {
+          // Sustained noise (voice). Reject silently.
+        }
+      }
+    } else if (snr > this.snrThreshold && smoothSte > this.absMinEnergy) {
+      // Trigger! Start 40ms capture window instead of firing immediately
+      this.captureFrames = this.CAPTURE_MAX;
+      this.tapPeakEnergy = smoothSte;
+      this.tapIsMono     = mono;
     }
 
     return true;

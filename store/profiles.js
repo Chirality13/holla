@@ -18,7 +18,7 @@ class ProfileStore {
         snrThreshold: 25,      // tap must be 25× above ambient noise floor
         cooldown:     400,     // ms between taps
         k:            3,       // KNN neighbours
-        maxDistance:  300,     // max KNN distance to accept a classification
+        maxDistance:  150,     // max KNN distance to accept a classification
         fftSize:      2048,    // GCC-PHAT window
         notifyOnTap:  true,    // native notification
         debugMode:    false    // show raw feature values
