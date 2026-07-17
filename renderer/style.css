@@ -222,6 +222,49 @@ html, body {
 .btn-primary:hover  { transform: translateY(-1px); box-shadow: 0 6px 28px var(--accent-glow); }
 .btn-primary:active { transform: translateY(0); }
 .btn-primary.disabled { opacity: 0.4; pointer-events: none; }
+/* ── Virtual Desk ── */
+.virtual-desk {
+  flex: 1; min-height: 400px;
+  background: var(--bg-2); border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  position: relative; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: inset 0 0 40px rgba(0,0,0,0.5);
+  margin-top: 16px;
+}
+.virtual-desk.hidden { display: none !important; }
+.desk-laptop {
+  position: absolute;
+  width: 80px; height: 80px;
+  background: rgba(255,255,255,0.05); border: 1px solid var(--border);
+  border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-2);
+  pointer-events: none;
+}
+.desk-button {
+  position: absolute;
+  width: 72px; height: 72px;
+  background: var(--bg-3); border: 1px solid var(--border);
+  border-radius: 50%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  cursor: grab;
+  transition: box-shadow var(--t-fast);
+  user-select: none;
+  transform: translate(-50%, -50%);
+}
+.desk-button:active { cursor: grabbing; box-shadow: 0 0 0 4px var(--accent-glow); }
+.desk-button .b-icon { font-size: 24px; margin-bottom: 2px; pointer-events: none; }
+.desk-button .b-name { font-size: 10px; color: var(--text-2); font-weight: 600; pointer-events: none; white-space: nowrap; max-width: 60px; overflow: hidden; text-overflow: ellipsis; }
+.desk-button.firing {
+  animation: fire-pulse 0.5s ease-out;
+  border-color: var(--accent);
+}
+@keyframes fire-pulse {
+  0% { transform: translate(-50%, -50%) scale(0.9); box-shadow: 0 0 0 0 var(--accent); }
+  50% { transform: translate(-50%, -50%) scale(1.1); box-shadow: 0 0 20px 4px var(--accent-glow); }
+  100% { transform: translate(-50%, -50%) scale(1); box-shadow: 0 0 0 0 transparent; }
+};
 
 .btn-secondary {
   display: inline-flex; align-items: center; gap: 7px;

@@ -298,7 +298,17 @@ function onTapReceived({ features, monoMode, tdoa, snr, noiseFloor }) {
   const result = knn.classify(features);
   if (!result) return;
 
-  const maxDist = state.settings.maxDistance || 300;
+  const maxDist = result.threshold;
+
+  if (result.buttonId === '__REJECT__') {
+    if (result.distance <= maxDist) {
+      updateMonitor(features, tdoa, result);
+      addTapLog(fmtTime(new Date()), { name: 'Rejected (Anti-Button)', confidence: result.confidence }, result.distance);
+    } else {
+      addTapLog(fmtTime(new Date()), null, result.distance);
+    }
+    return;
+  }
 
   // Find button definition first
   const btn = state.buttons.find(b => b.id === result.buttonId);
@@ -549,18 +559,20 @@ function renderButtonGrid() {
 
   grid.innerHTML = '';
 
-  if (state.buttons.length === 0) {
-    empty.style.display = 'flex';
-    grid.style.display  = 'none';
-    sub.textContent = 'Click New Button to calibrate a tap zone and assign an action.';
+  const visibleButtons = state.buttons.filter(b => b.id !== '__REJECT__');
+
+  if (visibleButtons.length === 0) {
+    grid.classList.add('hidden');
+    empty.classList.remove('hidden');
+    sub.textContent = 'You have 0 active buttons.';
     return;
   }
 
-  empty.style.display = 'none';
-  grid.style.display  = 'grid';
-  sub.textContent = `${state.buttons.length} button${state.buttons.length !== 1 ? 's' : ''} calibrated. Tap your table!`;
+  grid.classList.remove('hidden');
+  empty.classList.add('hidden');
+  sub.textContent = `You have ${visibleButtons.length} active button${visibleButtons.length===1?'':'s'}.`;
 
-  for (const btn of state.buttons) {
+  for (const btn of visibleButtons) {
     const card = document.createElement('div');
     card.className     = 'button-card';
     card.dataset.id    = btn.id;
@@ -613,6 +625,7 @@ async function deleteButton(id) {
 
 // ── Add Button button ─────────────────────────────────────────────────────
 $('btn-add').addEventListener('click', () => openWizard(null));
+if ($('btn-train-anti')) $('btn-train-anti').addEventListener('click', () => openWizard('__REJECT__'));
 
 // ── Calibration Wizard ────────────────────────────────────────────────────
 function setupWizard() {
@@ -675,6 +688,27 @@ function openWizard(existingBtn) {
   const w = state.wizard;
   w.step        = 1;
   w.samples     = [];
+
+  if (existingBtn === '__REJECT__') {
+    w.editId      = '__REJECT__';
+    w.name        = 'Ignored Sounds';
+    w.icon        = '🚫';
+    w.actionType  = 'none';
+    w.actionValue = '';
+    
+    // Append to existing reject samples if any
+    const existing = state.buttons.find(b => b.id === '__REJECT__');
+    if (existing && existing.samples) {
+      w.samples = [...existing.samples];
+    }
+    
+    $('modal-title').textContent = 'Train Ignored Sounds';
+    $('modal-backdrop').classList.remove('hidden');
+    gotoWizardStep(3);
+    startCalibration();
+    return;
+  }
+
   w.editId      = existingBtn ? existingBtn.id : null;
   w.name        = existingBtn ? existingBtn.name  : '';
   w.icon        = existingBtn ? existingBtn.icon  : '🎯';
@@ -765,33 +799,29 @@ function resetCalibrationUI() {
 
 function handleCalibrationTap(features, logE) {
   const w = state.wizard;
-  if (w.samples.length >= NEED_TAPS) return;
 
   // Reject if tap was too quiet (phantom event from noise floor glitch)
-  if (logE === undefined) logE = features[5];
+  if (logE === undefined) logE = features[1]; // logE is now features[1]
   if (logE < -3.5) {
     $('cal-status').textContent = 'Too quiet — tap harder on the table!';
     return;
   }
 
   w.samples.push(features);
-  const n   = w.samples.length;
-  const pct = n / NEED_TAPS;
+  const n = w.samples.length;
+  const MIN_TAPS = 5;
+  const pct = Math.min(n / MIN_TAPS, 1);
 
   // Update ring
   $('cal-count').textContent = n;
   const circumference = 326.7;
   $('cal-progress').style.strokeDashoffset = circumference * (1 - pct);
 
-  // Fill dot
-  const dot = document.querySelector(`.sample-dot[data-idx="${n - 1}"]`);
-  if (dot) dot.classList.add('filled');
-
   // Status
-  if (n < NEED_TAPS) {
-    $('cal-status').textContent = `Keep tapping... (${n}/10)`;
+  if (n < MIN_TAPS) {
+    $('cal-status').textContent = `Keep going... (${n}/${MIN_TAPS})`;
   } else {
-    $('cal-status').textContent = 'Calibration complete!';
+    $('cal-status').textContent = `Great! Keep tapping to increase precision, or click Done.`;
     $('w-finish').classList.remove('disabled');
   }
 

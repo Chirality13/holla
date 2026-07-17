@@ -83,14 +83,17 @@
         <div class="view-header">
           <div>
             <h1 class="view-title">Buttons</h1>
-            <p class="view-sub" id="dash-sub">Tap a spot on your table to trigger a button.</p>
+            <p class="view-sub" id="dash-sub">You have 0 active buttons.</p>
           </div>
-          <button class="btn-primary" id="btn-add">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-            New Button
-          </button>
+          <div style="display:flex; gap: 8px;">
+            <button class="btn-secondary" id="btn-train-anti">Train Ignored Sounds 🚫</button>
+            <button class="btn-primary" id="btn-add">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+              New Button
+            </button>
+          </div>
         </div>
 
         <!-- Empty state -->
@@ -106,9 +109,15 @@
           <p>Click <strong>New Button</strong> to calibrate a tap location and assign an action to it.</p>
         </div>
 
-        <!-- Button grid -->
-        <div class="button-grid" id="button-grid"></div>
-      </div>
+        <!-- Virtual Desk -->
+        <div class="virtual-desk" id="virtual-desk">
+          <div class="desk-laptop">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <rect x="3" y="4" width="18" height="12" rx="2" ry="2"/>
+              <path d="M2 20h20"/>
+            </svg>
+          </div>
+        </div>
 
       <!-- ── Monitor View ───────────────────────────────────────────── -->
       <div class="view" id="view-monitor">
@@ -360,22 +369,9 @@
 
         <p class="cal-status" id="cal-status">Waiting for microphone…</p>
 
-        <div class="tap-samples" id="tap-samples">
-          <div class="sample-dot" data-idx="0"></div>
-          <div class="sample-dot" data-idx="1"></div>
-          <div class="sample-dot" data-idx="2"></div>
-          <div class="sample-dot" data-idx="3"></div>
-          <div class="sample-dot" data-idx="4"></div>
-          <div class="sample-dot" data-idx="5"></div>
-          <div class="sample-dot" data-idx="6"></div>
-          <div class="sample-dot" data-idx="7"></div>
-          <div class="sample-dot" data-idx="8"></div>
-          <div class="sample-dot" data-idx="9"></div>
-        </div>
-
         <div class="wizard-nav">
           <button class="btn-secondary" id="w-back-3">← Back</button>
-          <button class="btn-primary disabled" id="w-finish">Save Button ✓</button>
+          <button class="btn-primary disabled" id="w-finish">Done ✓</button>
         </div>
       </div>
 
