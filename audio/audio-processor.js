@@ -112,9 +112,12 @@ class HollaProcessor extends AudioWorkletProcessor {
     // 3. WARMUP — rapidly calibrate noise floor, don't fire taps
     if (this.warmupCounter > 0) {
       this.warmupCounter--;
-      // Fast adaptation: converges to true ambient in ~8 frames
-      this.noiseFloor = this.ALPHA_FAST * this.noiseFloor +
-                        (1 - this.ALPHA_FAST) * smoothSte;
+      // Ignore digital silence from mic initialisation so floor doesn't collapse to 0
+      if (smoothSte > 1e-7) {
+        this.noiseFloor = this.ALPHA_FAST * this.noiseFloor +
+                          (1 - this.ALPHA_FAST) * smoothSte;
+      }
+      this.noiseFloor = Math.max(1e-7, this.noiseFloor);
 
       // Report warmup progress to renderer every 10 frames
       if (this.warmupCounter % 10 === 0) {
@@ -133,11 +136,16 @@ class HollaProcessor extends AudioWorkletProcessor {
     // 5. Compute SNR
     const snr = smoothSte / (this.noiseFloor + 1e-12);
 
-    // 6. Update noise floor ONLY on quiet frames (not during/near taps)
+    // 6. Update noise floor
     if (snr < 4) {
+      // Quiet frame: standard slow track of ambient noise
       this.noiseFloor = this.ALPHA_SLOW * this.noiseFloor +
                         (1 - this.ALPHA_SLOW) * smoothSte;
+    } else {
+      // Loud frame (tap/noise): extremely slow upward bleed in case the floor got stuck too low
+      this.noiseFloor *= 1.0001;
     }
+    this.noiseFloor = Math.max(1e-7, this.noiseFloor); // Ultimate safety clamp
 
     // 7. Tap onset gate: SNR gate AND absolute minimum energy gate
     if (snr > this.snrThreshold && smoothSte > this.absMinEnergy) {
