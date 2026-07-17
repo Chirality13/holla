@@ -210,7 +210,8 @@ async function startAudio() {
     source.connect(worklet);
 
     worklet.port.onmessage = ({ data }) => {
-      if (data.type === 'tap') onTapReceived(data);
+      if (data.type === 'tap')    onTapReceived(data);
+      if (data.type === 'warmup') onWarmup(data);
     };
 
     state.audioCtx     = ctx;
@@ -236,8 +237,14 @@ async function startAudio() {
     // Start waveform
     startWaveform(analyser, ctx);
 
-    state.mode = 'listening';
-    setStatus('listening', 'Listening');
+    // BUG FIX: Do NOT override 'calibrating' mode — user may have opened the
+    // calibration wizard before clicking Start, so we must preserve that mode.
+    if (state.mode !== 'calibrating') {
+      state.mode = 'listening';
+      setStatus('listening', 'Listening');
+    } else {
+      setStatus('calibrating', 'Calibrating…');
+    }
     $('btn-listen').classList.add('active');
     $('listen-label').textContent = 'Stop';
 
@@ -271,11 +278,17 @@ function stopAudio() {
 
 // ── Tap Handler ───────────────────────────────────────────────────────────
 function onTapReceived({ features, monoMode, tdoa, snr, noiseFloor }) {
-  // Update the live SNR gauge regardless of mode
+  // Always update SNR gauge
   updateSnrGauge(snr);
 
+  // ── Absolute energy gate ─────────────────────────────────────────────
+  // features[5] = logEnergy. log10(0.001) = -3.
+  // Real taps are -3 or higher; ambient noise / phantom events are below -3.5.
+  const logE = features[5];
+  if (logE < -3.5) return;  // Too quiet — ignore completely
+
   if (state.mode === 'calibrating') {
-    handleCalibrationTap(features);
+    handleCalibrationTap(features, logE);
     return;
   }
   if (state.mode !== 'listening') return;
@@ -286,21 +299,20 @@ function onTapReceived({ features, monoMode, tdoa, snr, noiseFloor }) {
   if (!result) return;
 
   const maxDist = state.settings.maxDistance || 300;
-  updateMonitor(features, tdoa, result);
-  addTapLog(fmtTime(new Date()), result, result.distance);
 
-  if (result.distance > maxDist) {
-    addTapLog(fmtTime(new Date()), null, result.distance);
-    return;
-  }
-
-  // Find button definition
+  // Find button definition first
   const btn = state.buttons.find(b => b.id === result.buttonId);
   if (!btn) return;
 
-  // Fire!
-  fireButton(btn);
+  if (result.distance <= maxDist) {
+    updateMonitor(features, tdoa, result);
+    addTapLog(fmtTime(new Date()), result, result.distance);
+    fireButton(btn);
+  } else {
+    addTapLog(fmtTime(new Date()), null, result.distance);
+  }
 }
+
 
 function fireButton(btn) {
   // Visual feedback
@@ -428,6 +440,14 @@ function addTapLog(time, result, dist) {
 
   log.insertBefore(entry, log.firstChild);
   while (log.children.length > 40) log.removeChild(log.lastChild);
+}
+// ── Warmup handler ───────────────────────────────────────────────────────
+function onWarmup({ progress }) {
+  if (state.mode !== 'calibrating') return;
+  const pct = Math.round(progress * 100);
+  $('cal-status').textContent = pct < 100
+    ? `Calibrating microphone… ${pct}%`
+    : 'Tap the table 5 times in the same spot!';
 }
 
 function addTapLogEntry(name, status) {
@@ -712,11 +732,16 @@ function startCalibration() {
   resetCalibrationUI();
 
   if (!state.audioCtx) {
-    startAudio().then(() => {
-      $('cal-status').textContent = 'Tap the table 5 times in the same spot!';
-    });
+    // Audio not running yet — start it; mode stays 'calibrating'
+    $('cal-status').textContent = 'Starting microphone…';
+    startAudio();
   } else {
-    $('cal-status').textContent = 'Tap the table 5 times in the same spot!';
+    // Audio already running — send RESET to worklet so warmup reruns
+    // This fixes the "back then forward again" phantom tap bug
+    if (state.workletNode) {
+      state.workletNode.port.postMessage({ type: 'reset' });
+    }
+    $('cal-status').textContent = 'Calibrating microphone… 0%';
   }
 }
 
@@ -737,9 +762,16 @@ function resetCalibrationUI() {
   $$('.sample-dot').forEach(d => d.classList.remove('filled'));
 }
 
-function handleCalibrationTap(features) {
+function handleCalibrationTap(features, logE) {
   const w = state.wizard;
   if (w.samples.length >= NEED_TAPS) return;
+
+  // Reject if tap was too quiet (phantom event from noise floor glitch)
+  if (logE === undefined) logE = features[5];
+  if (logE < -3.5) {
+    $('cal-status').textContent = 'Too quiet — tap harder on the table!';
+    return;
+  }
 
   w.samples.push(features);
   const n   = w.samples.length;

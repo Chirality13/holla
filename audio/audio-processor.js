@@ -1,73 +1,79 @@
 /**
- * HollaProcessor — AudioWorklet processor v2
+ * HollaProcessor — AudioWorklet processor v3
  *
- * KEY FIXES vs v1:
- *   1. Adaptive SNR threshold — continuously estimates the ambient noise floor
- *      and requires the tap to be `snrThreshold` × louder (default 25×).
- *      Fan noise, A/C, keyboard typing all raise the floor, so only genuine
- *      loud taps pass. Absolute energy alone (v1) was useless.
+ * FIXES vs v2:
+ *   1. Warmup phase (0.8 s) — no taps fired while noise floor calibrates.
+ *      Eliminates phantom taps from mic initialisation and cold start.
  *
- *   2. Better spatial features for Intel SST — the Intel Smart Sound Technology
- *      driver applies beamforming, which DESTROYS raw TDOA phase information.
- *      Instead we use two features that survive DSP processing:
+ *   2. noiseFloor starts at 0.005 (conservative / high) and adapts DOWN
+ *      to the actual ambient level during warmup (alpha=0.85, fast).
+ *      After warmup, slow tracking (alpha=0.997) follows gradual changes.
  *
- *      a) ILD (Inter-channel Level Difference)
- *         ild = (rmsL − rmsR) / (rmsL + rmsR)   → −1 (pure left) … +1 (pure right)
- *         Even post-beamforming, amplitude differences between channels remain.
+ *   3. 'reset' command — sent by the renderer when the user enters the
+ *      calibration wizard for the Nth time. Restarts warmup and clears
+ *      the cooldown so a fresh, clean baseline is measured each time.
  *
- *      b) Spectral shape fingerprint (3 normalised frequency bands)
- *         Different table positions excite different resonant modes. A tap at
- *         "rear left" has a different low/mid/high energy ratio than "front right".
- *         These ratios are independent of how hard you tap.
+ *   4. Absolute minimum energy gate (absMinEnergy=0.001) prevents the
+ *      processor from firing on microphone self-noise / digital silence.
  *
- *   3. Feature vector (6 values):
- *      [ild, spectralCentroid, bandLow, bandMid, bandHigh, logEnergy]
- *      Backwards-incompatible with v1 — profiles must be re-calibrated.
- *
- * Pipeline per 128-sample quantum:
- *   1. Accumulate L/R samples into 4096-sample circular buffers
- *   2. Compute STE; update adaptive noise floor
- *   3. If STE / noiseFloor > snrThreshold → tap onset
- *   4. Extract 2048-sample window, apply Hanning window
- *   5. Compute ILD, spectral shape, GCC-PHAT (for debug), log energy
- *   6. Post feature vector to renderer via port.postMessage
+ *   5. Posts 'warmup' progress messages so the UI can show "Calibrating
+ *      mic…" status instead of "tap now" during the blind period.
  */
 
 class HollaProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
 
-    // ── Config ──────────────────────────────────────────────────────────
     this.FFT_SIZE   = 2048;
     this.BUF_SIZE   = this.FFT_SIZE * 2;
 
-    // Tap detection
-    this.snrThreshold   = 25;      // tap must be 25× above noise floor
-    this.absMinEnergy   = 0.0002;  // absolute floor — never trigger below this
-    this.cooldownFrames = Math.floor(sampleRate * 0.40 / 128);  // 400 ms
+    // ── Tap detection params ────────────────────────────────────────────
+    this.snrThreshold   = 25;       // × above noise floor
+    this.absMinEnergy   = 0.001;    // absolute gate — never fires quieter
+    this.cooldownFrames = Math.ceil(sampleRate * 0.40 / 128);
     this.cooldown       = 0;
     this.enabled        = true;
 
-    // Adaptive noise floor (exponential moving average of quiet frames)
-    this.noiseFloor   = 1e-6;
-    this.noiseAlpha   = 0.997;    // ~133 quiet frames (~350ms) to adapt
+    // ── Adaptive noise floor ────────────────────────────────────────────
+    // Starts HIGH → adapts DOWN during warmup. Better than starting low.
+    this.noiseFloor   = 0.005;
+    this.ALPHA_SLOW   = 0.997;   // after warmup: ~0.9 s time constant
+    this.ALPHA_FAST   = 0.85;    // during warmup: very fast adaptation
 
-    // Smoothed STE
+    // ── Warmup ─────────────────────────────────────────────────────────
+    // Do not fire taps for the first WARMUP_FRAMES quanta (~0.8 s).
+    this.WARMUP_FRAMES  = Math.ceil(sampleRate * 0.80 / 128);
+    this.warmupCounter  = this.WARMUP_FRAMES;
+
+    // ── Smoothed STE ────────────────────────────────────────────────────
     this.energyBuf  = new Float32Array(8);
     this.energyIdx  = 0;
 
-    // Circular audio buffers
+    // ── Circular audio buffers ──────────────────────────────────────────
     this.bufL       = new Float32Array(this.BUF_SIZE);
     this.bufR       = new Float32Array(this.BUF_SIZE);
     this.writePos   = 0;
 
-    // Port config updates
+    // ── Port messages ───────────────────────────────────────────────────
     this.port.onmessage = ({ data }) => {
-      if (data.type !== 'config') return;
-      if (data.snrThreshold  !== undefined) this.snrThreshold   = data.snrThreshold;
-      if (data.enabled       !== undefined) this.enabled        = data.enabled;
-      if (data.cooldown      !== undefined) {
-        this.cooldownFrames = Math.floor(sampleRate * data.cooldown / 1000 / 128);
+      if (!data) return;
+      switch (data.type) {
+        case 'config':
+          if (data.snrThreshold !== undefined) this.snrThreshold   = data.snrThreshold;
+          if (data.enabled      !== undefined) this.enabled        = data.enabled;
+          if (data.cooldown     !== undefined) {
+            this.cooldownFrames = Math.ceil(sampleRate * data.cooldown / 1000 / 128);
+          }
+          break;
+
+        // Called when user enters calibration wizard (fresh or 2nd attempt)
+        case 'reset':
+          this.warmupCounter = this.WARMUP_FRAMES;
+          this.cooldown      = 0;
+          this.noiseFloor    = 0.005;   // restart estimate
+          this.energyBuf.fill(0);
+          this.energyIdx = 0;
+          break;
       }
     };
   }
@@ -96,27 +102,44 @@ class HollaProcessor extends AudioWorkletProcessor {
     }
     ste /= (left.length * 2);
 
-    // Smooth over 8 frames
+    // Smooth energy (8-frame average)
     this.energyBuf[this.energyIdx % 8] = ste;
     this.energyIdx++;
     let smoothSte = 0;
     for (let i = 0; i < 8; i++) smoothSte += this.energyBuf[i];
     smoothSte /= 8;
 
-    // 3. Cooldown countdown
-    if (this.cooldown > 0) {
-      this.cooldown--;
+    // 3. WARMUP — rapidly calibrate noise floor, don't fire taps
+    if (this.warmupCounter > 0) {
+      this.warmupCounter--;
+      // Fast adaptation: converges to true ambient in ~8 frames
+      this.noiseFloor = this.ALPHA_FAST * this.noiseFloor +
+                        (1 - this.ALPHA_FAST) * smoothSte;
+
+      // Report warmup progress to renderer every 10 frames
+      if (this.warmupCounter % 10 === 0) {
+        this.port.postMessage({
+          type:      'warmup',
+          progress:  1 - this.warmupCounter / this.WARMUP_FRAMES,
+          noiseFloor: this.noiseFloor
+        });
+      }
       return true;
     }
 
-    // 4. Adaptive noise floor: only update during quiet frames
+    // 4. Cooldown countdown
+    if (this.cooldown > 0) { this.cooldown--; return true; }
+
+    // 5. Compute SNR
     const snr = smoothSte / (this.noiseFloor + 1e-12);
-    if (snr < 5) {
-      // Quiet frame — this IS the ambient level
-      this.noiseFloor = this.noiseAlpha * this.noiseFloor + (1 - this.noiseAlpha) * smoothSte;
+
+    // 6. Update noise floor ONLY on quiet frames (not during/near taps)
+    if (snr < 4) {
+      this.noiseFloor = this.ALPHA_SLOW * this.noiseFloor +
+                        (1 - this.ALPHA_SLOW) * smoothSte;
     }
 
-    // 5. Tap onset: SNR gate + absolute minimum
+    // 7. Tap onset gate: SNR gate AND absolute minimum energy gate
     if (snr > this.snrThreshold && smoothSte > this.absMinEnergy) {
       this.cooldown = this.cooldownFrames;
       this._processTap(smoothSte, mono);
@@ -127,15 +150,15 @@ class HollaProcessor extends AudioWorkletProcessor {
 
   // ── Tap feature extraction ───────────────────────────────────────────────
   _processTap(energy, mono) {
-    const N     = this.FFT_SIZE;
-    const chL   = new Float32Array(N);
-    const chR   = new Float32Array(N);
+    const N   = this.FFT_SIZE;
+    const chL = new Float32Array(N);
+    const chR = new Float32Array(N);
 
     const start = (this.writePos - N + this.BUF_SIZE) % this.BUF_SIZE;
     for (let i = 0; i < N; i++) {
-      const idx  = (start + i) % this.BUF_SIZE;
-      chL[i]     = this.bufL[idx];
-      chR[i]     = this.bufR[idx];
+      const idx = (start + i) % this.BUF_SIZE;
+      chL[i]    = this.bufL[idx];
+      chR[i]    = this.bufR[idx];
     }
 
     // Hanning window
@@ -145,67 +168,51 @@ class HollaProcessor extends AudioWorkletProcessor {
       chR[i] *= w;
     }
 
-    // ── ILD (Inter-channel Level Difference) ──────────────────────────
-    // Survives Intel SST beamforming; most reliable spatial feature.
+    // ILD
     let ssL = 0, ssR = 0;
-    for (let i = 0; i < N; i++) { ssL += chL[i] * chL[i]; ssR += chR[i] * chR[i]; }
+    for (let i = 0; i < N; i++) { ssL += chL[i]*chL[i]; ssR += chR[i]*chR[i]; }
     const rmsL = Math.sqrt(ssL / N);
     const rmsR = Math.sqrt(ssR / N);
-    const ild  = (rmsL - rmsR) / (rmsL + rmsR + 1e-12);   // −1…+1
+    const ild  = (rmsL - rmsR) / (rmsL + rmsR + 1e-12);
 
-    // ── Spectral analysis on mixed channel ──────────────────────────────
-    // Mix both channels; the spectral SHAPE (resonance fingerprint) is what
-    // discriminates table positions — independent of stereo balance.
-    const mixed  = new Float32Array(N);
+    // Spectral analysis on mixed channel
+    const mixed = new Float32Array(N);
     for (let i = 0; i < N; i++) mixed[i] = (chL[i] + chR[i]) * 0.5;
 
     const reM = new Float64Array(N), imM = new Float64Array(N);
     for (let i = 0; i < N; i++) reM[i] = mixed[i];
     this._fft(reM, imM);
 
-    // Power spectrum (only positive bins)
     const half  = N / 2;
     const power = new Float64Array(half);
     let   total = 0;
     for (let k = 0; k < half; k++) {
-      power[k] = reM[k] * reM[k] + imM[k] * imM[k];
-      total    += power[k];
+      power[k] = reM[k]*reM[k] + imM[k]*imM[k];
+      total   += power[k];
     }
 
-    // Spectral centroid (normalised 0–1)
     let wSum = 0;
     for (let k = 0; k < half; k++) wSum += k * power[k];
     const sc = total > 0 ? wSum / total / half : 0;
 
-    // 3 frequency bands (log-spaced) normalised to 0–1 sum = 1.
-    // At 48kHz, FFT size 2048: bin width = 23.4 Hz
-    //   low : 0–1000 Hz  → bins 0–42
-    //   mid : 1–8 kHz    → bins 43–341
-    //   high: 8–24 kHz   → bins 342–1023
-    const bLow  = this._bandEnergy(power, 0,   42)  / (total + 1e-12);
-    const bMid  = this._bandEnergy(power, 43,  341) / (total + 1e-12);
-    const bHigh = this._bandEnergy(power, 342, 1023) / (total + 1e-12);
+    const bLow  = this._bandEnergy(power,   0,  42) / (total + 1e-12);
+    const bMid  = this._bandEnergy(power,  43, 341) / (total + 1e-12);
+    const bHigh = this._bandEnergy(power, 342,1023) / (total + 1e-12);
 
-    // Log energy (compressed scale)
-    const logE = Math.log10(energy + 1e-12);
+    const logE  = Math.log10(energy + 1e-12);
+    const tdoa  = mono ? 0 : this._gccPhat(chL, chR);
 
-    // ── GCC-PHAT (still computed, used as a debug / secondary feature) ──
-    const tdoa = mono ? 0 : this._gccPhat(chL, chR);
-
-    // ── Emit ────────────────────────────────────────────────────────────
-    // Feature vector: [ild, sc, bandLow, bandMid, bandHigh, logEnergy]
     this.port.postMessage({
-      type:      'tap',
-      features:  [ild, sc, bLow, bMid, bHigh, logE],
-      tdoa,             // for Monitor display only
-      monoMode:  mono,
+      type:       'tap',
+      features:   [ild, sc, bLow, bMid, bHigh, logE],
+      tdoa,
+      monoMode:   mono,
       noiseFloor: this.noiseFloor,
       snr:        energy / (this.noiseFloor + 1e-12),
       timestamp:  currentTime
     });
   }
 
-  // ── Band energy (sum of power in [lo..hi] inclusive) ──────────────────
   _bandEnergy(power, lo, hi) {
     let s = 0;
     const end = Math.min(hi, power.length - 1);
@@ -213,61 +220,57 @@ class HollaProcessor extends AudioWorkletProcessor {
     return s;
   }
 
-  // ── GCC-PHAT ────────────────────────────────────────────────────────────
   _gccPhat(x0, x1) {
     const N   = x0.length;
     const re0 = new Float64Array(N), im0 = new Float64Array(N);
     const re1 = new Float64Array(N), im1 = new Float64Array(N);
-    for (let i = 0; i < N; i++) { re0[i] = x0[i]; re1[i] = x1[i]; }
-    this._fft(re0, im0); this._fft(re1, im1);
-    const gRe = new Float64Array(N), gIm = new Float64Array(N);
-    for (let k = 0; k < N; k++) {
-      const gr  = re0[k]*re1[k] + im0[k]*im1[k];
-      const gi  = im0[k]*re1[k] - re0[k]*im1[k];
-      const mag = Math.sqrt(gr*gr + gi*gi) + 1e-12;
-      gRe[k] = gr/mag; gIm[k] = gi/mag;
+    for (let i = 0; i < N; i++) { re0[i]=x0[i]; re1[i]=x1[i]; }
+    this._fft(re0,im0); this._fft(re1,im1);
+    const gRe=new Float64Array(N), gIm=new Float64Array(N);
+    for (let k=0;k<N;k++){
+      const gr=re0[k]*re1[k]+im0[k]*im1[k];
+      const gi=im0[k]*re1[k]-re0[k]*im1[k];
+      const mag=Math.sqrt(gr*gr+gi*gi)+1e-12;
+      gRe[k]=gr/mag; gIm[k]=gi/mag;
     }
-    this._ifft(gRe, gIm);
-    let maxV = -Infinity, maxI = 0;
-    for (let i = 0; i < N; i++) { if (gRe[i] > maxV) { maxV = gRe[i]; maxI = i; } }
-    if (maxI > N / 2) maxI -= N;
+    this._ifft(gRe,gIm);
+    let maxV=-Infinity,maxI=0;
+    for(let i=0;i<N;i++){if(gRe[i]>maxV){maxV=gRe[i];maxI=i;}}
+    if(maxI>N/2) maxI-=N;
     return maxI;
   }
 
-  // ── Cooley-Tukey DIT FFT ────────────────────────────────────────────────
   _fft(re, im) {
-    const N = re.length;
-    for (let i = 1, j = 0; i < N; i++) {
-      let bit = N >> 1;
-      for (; j & bit; bit >>= 1) j ^= bit;
-      j ^= bit;
-      if (i < j) {
-        let t; t=re[i];re[i]=re[j];re[j]=t; t=im[i];im[i]=im[j];im[j]=t;
-      }
+    const N=re.length;
+    for(let i=1,j=0;i<N;i++){
+      let bit=N>>1;
+      for(;j&bit;bit>>=1) j^=bit;
+      j^=bit;
+      if(i<j){let t;t=re[i];re[i]=re[j];re[j]=t;t=im[i];im[i]=im[j];im[j]=t;}
     }
-    for (let len = 2; len <= N; len <<= 1) {
-      const half = len >> 1;
-      const ang  = -2 * Math.PI / len;
-      const wBR  = Math.cos(ang), wBI = Math.sin(ang);
-      for (let i = 0; i < N; i += len) {
-        let wR = 1, wI = 0;
-        for (let k = 0; k < half; k++) {
-          const uR = re[i+k], uI = im[i+k];
-          const vR = re[i+k+half]*wR - im[i+k+half]*wI;
-          const vI = re[i+k+half]*wI + im[i+k+half]*wR;
-          re[i+k]=uR+vR; im[i+k]=uI+vI;
-          re[i+k+half]=uR-vR; im[i+k+half]=uI-vI;
-          const nR=wR*wBR-wI*wBI; wI=wR*wBI+wI*wBR; wR=nR;
+    for(let len=2;len<=N;len<<=1){
+      const half=len>>1;
+      const ang=-2*Math.PI/len;
+      const wBR=Math.cos(ang),wBI=Math.sin(ang);
+      for(let i=0;i<N;i+=len){
+        let wR=1,wI=0;
+        for(let k=0;k<half;k++){
+          const uR=re[i+k],uI=im[i+k];
+          const vR=re[i+k+half]*wR-im[i+k+half]*wI;
+          const vI=re[i+k+half]*wI+im[i+k+half]*wR;
+          re[i+k]=uR+vR;im[i+k]=uI+vI;
+          re[i+k+half]=uR-vR;im[i+k+half]=uI-vI;
+          const nR=wR*wBR-wI*wBI;wI=wR*wBI+wI*wBR;wR=nR;
         }
       }
     }
   }
 
-  _ifft(re, im) {
-    const N = re.length;
-    for (let i = 0; i < N; i++) im[i] = -im[i];
-    this._fft(re, im);
-    for (let i = 0; i < N; i++) { re[i] /= N; im[i] = -im[i] / N; }
+  _ifft(re,im){
+    const N=re.length;
+    for(let i=0;i<N;i++) im[i]=-im[i];
+    this._fft(re,im);
+    for(let i=0;i<N;i++){re[i]/=N;im[i]=-im[i]/N;}
   }
 }
 
