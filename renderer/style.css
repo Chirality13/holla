@@ -264,7 +264,53 @@ html, body {
   0% { transform: translate(-50%, -50%) scale(0.9); box-shadow: 0 0 0 0 var(--accent); }
   50% { transform: translate(-50%, -50%) scale(1.1); box-shadow: 0 0 20px 4px var(--accent-glow); }
   100% { transform: translate(-50%, -50%) scale(1); box-shadow: 0 0 0 0 transparent; }
-};
+}
+
+/* Button Grid */
+.button-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+  margin-top: 24px;
+}
+.button-grid.hidden { display: none !important; }
+
+.button-card {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  position: relative;
+  transition: transform var(--t-mid), box-shadow var(--t-mid), border-color var(--t-mid);
+  cursor: pointer;
+}
+.button-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--border-hover);
+  background: var(--bg-3);
+}
+.button-card.firing {
+  animation: pulse-border 0.6s cubic-bezier(0.1, 0.9, 0.2, 1);
+}
+@keyframes pulse-border {
+  0%   { border-color: var(--accent); box-shadow: 0 0 16px var(--accent-glow); transform: scale(0.97); }
+  100% { border-color: var(--border); box-shadow: 0 0 0 transparent; transform: scale(1); }
+}
+
+.b-icon { font-size: 36px; line-height: 1; filter: drop-shadow(0 4px 12px rgba(0,0,0,0.5)); }
+.b-name { font-size: 14px; font-weight: 700; color: var(--text-1); text-align: center; }
+.b-meta { font-size: 11px; color: var(--text-3); text-align: center; display: flex; flex-direction: column; gap: 4px; }
+.b-action { color: var(--accent-light); font-weight: 500; font-family: monospace; }
+
+.btn-del {
+  position: absolute; top: 8px; right: 8px;
+  width: 24px; height: 24px; border-radius: 6px;
+  background: transparent; border: none; color: var(--text-3);
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+  transition: all var(--t-fast);
+}
+.btn-del:hover { background: rgba(239,68,68,0.15); color: var(--red); }
 
 .btn-secondary {
   display: inline-flex; align-items: center; gap: 7px;

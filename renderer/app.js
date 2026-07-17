@@ -18,8 +18,8 @@ class KNNClassifier {
   constructor(k = 3) {
     this.k = k;
     this.samples = [];
-    // Weights: [ild, sc, bandLow, bandMid, bandHigh, logEnergy]
     this.weights = [15, 4, 6, 5, 3, 0.3];
+    this.buttonThresholds = {}; // Store thresholds if needed
   }
   loadFromButtons(buttons) {
     this.samples = [];
@@ -55,7 +55,13 @@ class KNNClassifier {
     let max = 0, winnerId = null;
     for (const [id, c] of Object.entries(votes)) { if (c > max) { max=c; winnerId=id; } }
     const winner = nbrs.find(n => n.buttonId === winnerId);
-    return { buttonId: winnerId, name: winner.name, confidence: max/k, distance: nbrs[0].dist };
+    return {
+      buttonId: winnerId,
+      name: winner.name,
+      confidence: max/k,
+      distance: nbrs[0].dist,
+      threshold: this.buttonThresholds[winnerId] || 150
+    };
   }
 }
 
@@ -325,13 +331,21 @@ function onTapReceived({ features, monoMode, tdoa, snr, noiseFloor }) {
 
 
 function fireButton(btn) {
-  // Visual feedback
-  const card = document.querySelector(`.desk-button[data-id="${btn.id}"]`);
-  if (card) {
-    card.classList.remove('firing');
-    void card.offsetWidth;  // reflow to restart animation
-    card.classList.add('firing');
-    setTimeout(() => card.classList.remove('firing'), 600);
+  // Visual feedback on virtual desk
+  const dCard = document.querySelector(`.desk-button[data-id="${btn.id}"]`);
+  if (dCard) {
+    dCard.classList.remove('firing');
+    void dCard.offsetWidth;
+    dCard.classList.add('firing');
+    setTimeout(() => dCard.classList.remove('firing'), 600);
+  }
+  // Visual feedback on list
+  const lCard = document.querySelector(`.button-card[data-id="${btn.id}"]`);
+  if (lCard) {
+    lCard.classList.remove('firing');
+    void lCard.offsetWidth;
+    lCard.classList.add('firing');
+    setTimeout(() => lCard.classList.remove('firing'), 600);
   }
 
   // Ripple at random position (decorative)
@@ -554,21 +568,25 @@ async function saveSettings() {
 // ── Button Grid ───────────────────────────────────────────────────────────
 function renderButtonGrid() {
   const desk   = $('virtual-desk');
+  const grid   = $('button-grid');
   const empty  = $('empty-state');
   const sub    = $('dash-sub');
 
   desk.querySelectorAll('.desk-button').forEach(el => el.remove());
+  grid.innerHTML = '';
 
   const visibleButtons = state.buttons.filter(b => b.id !== '__REJECT__');
 
   if (visibleButtons.length === 0) {
     desk.classList.add('hidden');
+    grid.classList.add('hidden');
     empty.classList.remove('hidden');
     sub.textContent = 'You have 0 active buttons.';
     return;
   }
 
   desk.classList.remove('hidden');
+  grid.classList.remove('hidden');
   empty.classList.add('hidden');
   sub.textContent = `You have ${visibleButtons.length} active button${visibleButtons.length===1?'':'s'}.`;
 
@@ -576,6 +594,7 @@ function renderButtonGrid() {
   const H = desk.offsetHeight || 400;
 
   for (const btn of visibleButtons) {
+    // 1. Desk Button (drag and drop map)
     const el = document.createElement('div');
     el.className = 'desk-button';
     el.dataset.id = btn.id;
@@ -630,6 +649,37 @@ function renderButtonGrid() {
     });
 
     desk.appendChild(el);
+
+    // 2. Grid Card (list below)
+    const card = document.createElement('div');
+    card.className     = 'button-card';
+    card.dataset.id    = btn.id;
+
+    const actionLabel = btn.action.type === 'screenshot'
+      ? 'Screenshot'
+      : (btn.action.type === 'custom_command' ? 'Command' : btn.action.value || btn.action.type);
+
+    card.innerHTML = `
+      <div class="b-icon">${btn.icon || '🎯'}</div>
+      <div class="b-name">${btn.name}</div>
+      <div class="b-meta">
+        <span class="b-action">${actionLabel}</span>
+        <span>${btn.samples ? btn.samples.length : 0} taps</span>
+      </div>
+      <button class="btn-del" title="Delete Button">×</button>
+    `;
+
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('.btn-del')) return;
+      openWizard(btn);
+    });
+
+    card.querySelector('.btn-del').addEventListener('click', (e) => {
+      e.stopPropagation();
+      deleteButton(btn.id);
+    });
+
+    grid.appendChild(card);
   }
 }
 
